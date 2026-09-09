@@ -209,7 +209,7 @@ afterEach(async () => {
 });
 
 describe.if(hasDom)('Viewer annotationHeader', () => {
-  test('keeps the legacy action bar unchanged when the opt-in prop is absent', async () => {
+  test('keeps legacy actions right-aligned without floating over document blocks', async () => {
     await mount(
       <Viewer
         blocks={blocks}
@@ -227,8 +227,58 @@ describe.if(hasDom)('Viewer annotationHeader', () => {
 
     expect(host?.querySelector('[data-viewer-document-header]')).toBeNull();
     const legacyActions = host?.querySelector<HTMLElement>('[data-sticky-actions]');
-    expect(legacyActions?.classList.contains('float-right')).toBe(true);
+    expect(legacyActions?.classList.contains('float-right')).toBe(false);
+    expect(legacyActions?.classList.contains('w-fit')).toBe(true);
+    expect(legacyActions?.classList.contains('ml-auto')).toBe(true);
     expect(legacyActions?.classList.contains('mt-6')).toBe(true);
+  });
+
+  test('cancels a pending table-toolbar unmount when the pointer reaches the toolbar', async () => {
+    const tableBlock: Block = {
+      id: 'table',
+      type: 'table',
+      content: '| Name | Value |\n| --- | --- |\n| Alpha | 1 |',
+      order: 0,
+      startLine: 1,
+    };
+    await mount(
+      <Viewer
+        blocks={[tableBlock]}
+        markdown={tableBlock.content}
+        annotations={[]}
+        onAddAnnotation={() => {}}
+        onSelectAnnotation={() => {}}
+        selectedAnnotationId={null}
+        mode="selection"
+        taterMode={false}
+        stickyActions={false}
+        disableCodePathValidation
+      />,
+    );
+
+    const table = host?.querySelector<HTMLElement>('[data-block-id="table"]');
+    if (!table) throw new Error('Expected rendered table');
+
+    await act(async () => {
+      table.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    expect(document.querySelector('button[title="Copy as CSV"]')).not.toBeNull();
+
+    await act(async () => {
+      table.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+      await new Promise((resolve) => setTimeout(resolve, 110));
+    });
+
+    const csvButton = document.querySelector<HTMLButtonElement>('button[title="Copy as CSV"]');
+    const toolbar = csvButton?.closest<HTMLElement>('.fixed');
+    if (!toolbar) throw new Error('Expected exiting table toolbar');
+
+    await act(async () => {
+      toolbar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    });
+
+    expect(document.querySelector('button[title="Copy as CSV"]')).not.toBeNull();
   });
 
   test('owns one in-flow, printable-safe header and preserves operative controls', async () => {

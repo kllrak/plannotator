@@ -441,6 +441,34 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
   const [hoveredTable, setHoveredTable] = useState<{ block: Block; element: HTMLElement } | null>(null);
   const [isTableToolbarExiting, setIsTableToolbarExiting] = useState(false);
   const tableHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tableToolbarUnmountTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelTableToolbarExit = useCallback(() => {
+    if (tableHoverTimeoutRef.current) {
+      clearTimeout(tableHoverTimeoutRef.current);
+      tableHoverTimeoutRef.current = null;
+    }
+    if (tableToolbarUnmountTimeoutRef.current) {
+      clearTimeout(tableToolbarUnmountTimeoutRef.current);
+      tableToolbarUnmountTimeoutRef.current = null;
+    }
+    setIsTableToolbarExiting(false);
+  }, []);
+  const scheduleTableToolbarExit = useCallback(() => {
+    cancelTableToolbarExit();
+    tableHoverTimeoutRef.current = setTimeout(() => {
+      tableHoverTimeoutRef.current = null;
+      setIsTableToolbarExiting(true);
+      tableToolbarUnmountTimeoutRef.current = setTimeout(() => {
+        tableToolbarUnmountTimeoutRef.current = null;
+        setHoveredTable(null);
+        setIsTableToolbarExiting(false);
+      }, 150);
+    }, 100);
+  }, [cancelTableToolbarExit]);
+  useEffect(() => () => {
+    if (tableHoverTimeoutRef.current) clearTimeout(tableHoverTimeoutRef.current);
+    if (tableToolbarUnmountTimeoutRef.current) clearTimeout(tableToolbarUnmountTimeoutRef.current);
+  }, []);
   const [popoutTable, setPopoutTable] = useState<Block | null>(null);
   // Viewer-specific comment popover state (global comments + code blocks)
   const [viewerCommentPopover, setViewerCommentPopover] = useState<{
@@ -1090,7 +1118,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
           <>
             {badgeClearance > 0 && <div data-print-hide style={{ height: badgeClearance }} aria-hidden="true" />}
             {stickyActions && <div ref={stickySentinelRef} className="h-0 w-0 float-right" aria-hidden="true" />}
-            <div data-print-hide data-sticky-actions className={`${stickyActions ? 'sticky top-3' : ''} z-30 float-right flex items-start gap-1 md:gap-2 rounded-lg p-1 md:p-2 transition-colors duration-150 ${isStuck ? 'bg-card/95 backdrop-blur-sm shadow-sm' : ''} ${gridEnabled ? '-mr-3 md:-mr-5 lg:-mr-7 xl:-mr-9' : '-mr-1 md:-mr-2'} mt-6 md:-mt-5 lg:-mt-7 xl:-mt-9`}>
+            <div data-print-hide data-sticky-actions className={`${stickyActions ? 'sticky top-3' : ''} z-30 w-fit ml-auto flex items-start gap-1 md:gap-2 rounded-lg p-1 md:p-2 transition-colors duration-150 ${isStuck ? 'bg-card/95 backdrop-blur-sm shadow-sm' : ''} ${gridEnabled ? '-mr-3 md:-mr-5 lg:-mr-7 xl:-mr-9' : '-mr-1 md:-mr-2'} mt-6 md:-mt-5 lg:-mt-7 xl:-mt-9`}>
               {documentActions}
             </div>
           </>
@@ -1137,24 +1165,12 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
               githubRepo={repoInfo?.display}
               onNavigateAnchor={scrollToAnchor}
               onHover={(element) => {
-                if (tableHoverTimeoutRef.current) {
-                  clearTimeout(tableHoverTimeoutRef.current);
-                  tableHoverTimeoutRef.current = null;
-                }
-                setIsTableToolbarExiting(false);
+                cancelTableToolbarExit();
                 if (!toolbarState) {
                   setHoveredTable({ block: group.block, element });
                 }
               }}
-              onLeave={() => {
-                tableHoverTimeoutRef.current = setTimeout(() => {
-                  setIsTableToolbarExiting(true);
-                  setTimeout(() => {
-                    setHoveredTable(null);
-                    setIsTableToolbarExiting(false);
-                  }, 150);
-                }, 100);
-              }}
+              onLeave={scheduleTableToolbarExit}
             />
           ) : group.block.type === 'code' ? (
             <CodeBlock
@@ -1231,28 +1247,10 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
             onExpand={() => {
               setPopoutTable(hoveredTable.block);
               setHoveredTable(null);
-              setIsTableToolbarExiting(false);
-              if (tableHoverTimeoutRef.current) {
-                clearTimeout(tableHoverTimeoutRef.current);
-                tableHoverTimeoutRef.current = null;
-              }
+              cancelTableToolbarExit();
             }}
-            onMouseEnter={() => {
-              if (tableHoverTimeoutRef.current) {
-                clearTimeout(tableHoverTimeoutRef.current);
-                tableHoverTimeoutRef.current = null;
-              }
-              setIsTableToolbarExiting(false);
-            }}
-            onMouseLeave={() => {
-              tableHoverTimeoutRef.current = setTimeout(() => {
-                setIsTableToolbarExiting(true);
-                setTimeout(() => {
-                  setHoveredTable(null);
-                  setIsTableToolbarExiting(false);
-                }, 150);
-              }, 100);
-            }}
+            onMouseEnter={cancelTableToolbarExit}
+            onMouseLeave={scheduleTableToolbarExit}
           />
         )}
 
